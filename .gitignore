@@ -1,0 +1,17 @@
+*.pyc
+__pycache__/
+*.db
+*.sqlite3
+.env
+venv/
+env/
+.vscode/
+.idea/
+*.log
+.DS_Store
+custom_rate.json
+*.jpg
+*.png
+Channel*.txt
+快速启动.md
+check_config.py
