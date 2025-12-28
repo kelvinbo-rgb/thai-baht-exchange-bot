@@ -28,7 +28,7 @@ def calculate_exchange(amount_cny, rate):
     """Calculates the amount of THB received."""
     return amount_cny * rate
 
-def format_rate_comparison(rates, highlight_provider='SuperRich Thailand'):
+def format_rate_comparison(rates, highlight_provider='曼谷市场价'):
     """
     Formats rates for display with highlighting.
     
@@ -77,9 +77,9 @@ def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_pro
     Returns:
         Formatted string for LINE message
     """
-    # Filter out SuperRich, BOC, ICBC from public display
+    # Filter out technical internal rates from public display, but keep 曼谷市场价 and 泰国央行参考价
     public_rates = [r for r in rates if r.get('provider') not in [
-        'SuperRich Thailand', 'Bank of China (TH)', 'ICBC (Thailand)'
+        '国际中间价', 'Bank of China (TH)', 'ICBC (Thailand)'
     ] and r.get('status') in ['success', 'fallback']]
     
     # Add custom rate if provided
@@ -132,9 +132,9 @@ def format_all_rates_table(rates, custom_rate=None):
     Format all rates in a detailed table for LINE display.
     Only shows Thai banks + custom rate (no SuperRich, BOC, ICBC).
     """
-    # Filter to only public rates (Thai banks)
+    # Filter to only public rates (Thai banks + market refs)
     public_rates = [r for r in rates if r.get('provider') not in [
-        'SuperRich Thailand', 'Bank of China (TH)', 'ICBC (Thailand)'
+        '国际中间价', 'Bank of China (TH)', 'ICBC (Thailand)'
     ] and r.get('status') in ['success', 'fallback']]
     
     # Add custom rate at the top if provided

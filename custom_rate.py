@@ -21,17 +21,15 @@ def set_custom_rate(buying_tt, selling_tt=None, provider_name="优选汇率"):
     
     Args:
         buying_tt: Buying TT rate (what you pay customers for their CNY)
-        selling_tt: Selling TT rate (optional, defaults to buying + 0.05)
+        selling_tt: Selling TT rate (optional, defaults to buying + 0.20)
         provider_name: Display name for your rates
-    
-    Returns:
-        Dictionary with rounded rates
     """
     # Round to nearest 0.05
     buying_rounded = round_to_05(buying_tt)
     
     if selling_tt is None:
-        selling_rounded = buying_rounded + 0.05
+        # Default spread: 20 pips (0.20)
+        selling_rounded = buying_rounded + 0.20
     else:
         selling_rounded = round_to_05(selling_tt)
     
@@ -48,7 +46,7 @@ def set_custom_rate(buying_tt, selling_tt=None, provider_name="优选汇率"):
     try:
         with open(RATE_FILE, 'w', encoding='utf-8') as f:
             json.dump(rate_data, f, ensure_ascii=False, indent=2)
-        logging.info(f"Custom rate set: {buying_rounded} / {selling_rounded}")
+        logging.info(f"Custom rate set: Buy={buying_rounded}, Sell={selling_rounded}")
     except Exception as e:
         logging.error(f"Failed to save custom rate: {e}")
     
@@ -70,26 +68,23 @@ def get_custom_rate():
         logging.error(f"Failed to load custom rate: {e}")
         return None
 
-def auto_set_from_superrich(superrich_rate, margin=0.0, provider_name="优选汇率"):
+def auto_set_from_bot(bot_rate, provider_name="优选汇率"):
     """
-    Automatically set custom rate based on SuperRich rate.
-    
-    Args:
-        superrich_rate: SuperRich rate dictionary
-        margin: Adjustment margin (e.g., -0.02 means 0.02 lower than SuperRich)
-        provider_name: Display name
-    
-    Returns:
-        Dictionary with custom rate
+    Automatically set custom rate based on Bank of Thailand (BOT) rate.
+    Logic: BOT rate rounded to 0/5. Sell = Buy + 0.20.
     """
-    if superrich_rate.get('status') not in ['success', 'fallback']:
-        logging.error("Invalid SuperRich rate provided")
+    if bot_rate.get('status') not in ['success', 'fallback']:
+        logging.error("Invalid BOT rate provided")
         return None
     
-    base_rate = superrich_rate.get('buying_tt', 4.50)
-    adjusted_rate = base_rate + margin
+    base_rate = bot_rate.get('buying_tt', 0.0)
+    if base_rate == 0.0:
+        return None
+        
+    # logic: round to 0.05
+    target_buy = round_to_05(base_rate)
     
-    return set_custom_rate(adjusted_rate, provider_name=provider_name)
+    return set_custom_rate(target_buy, provider_name=provider_name)
 
 if __name__ == "__main__":
     # Example usage

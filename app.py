@@ -110,9 +110,15 @@ def handle_message(event):
     except:
         user_name = "User"
     
-    # 🔥 重要: 打印 USER ID 供管理员配置使用
+    # Detect source type (User, Group, Room)
+    source_type = event.source.type
+    group_id = event.source.group_id if source_type == 'group' else None
+    
+    # 🔥 重要: 打印 USER ID & 来源 供管理员配置使用
     logger.info("="*60)
-    logger.info(f"📨 收到消息")
+    logger.info(f"📨 收到消息 [{'群聊' if source_type == 'group' else '私聊'}]")
+    if group_id:
+        logger.info(f"👥 Group ID: {group_id}")
     logger.info(f"👤 用户名: {user_name}")
     logger.info(f"🆔 USER ID: {user_id}")
     logger.info(f"💬 消息内容: {text}")
@@ -141,7 +147,7 @@ def route_command(user_id, user_name, text):
         return handle_rate_display()
     
     # Calculation commands
-    calc_match = re.match(r'(计算|calc|calculate)\s+(\d+\.?\d*)', text_lower)
+    calc_match = re.match(r'(计算|calc|calculate)\s*(\d+\.?\d*)', text_lower)
     if calc_match:
         amount = float(calc_match.group(2))
         return handle_calculation(amount)
@@ -173,7 +179,7 @@ def route_command(user_id, user_name, text):
             rate_value = float(set_rate_match.group(2))
             return handle_set_custom_rate(rate_value)
         
-        # Auto set from SuperRich
+        # Auto set from BOT
         if text_lower in ['自动设置', 'auto', 'autoset']:
             return handle_auto_set_rate()
         
@@ -319,17 +325,22 @@ def handle_set_custom_rate(rate_value):
     return f"✅ 已设置优选汇率\n\n买入价: {result['buying_tt']:.2f}\n卖出价: {result['selling_tt']:.2f}\n\n提示: 汇率已自动调整为0.05的倍数"
 
 def handle_auto_set_rate():
-    """Admin: Auto-set rate from SuperRich."""
-    # Find SuperRich rate from latest rates
-    superrich = next((r for r in latest_rates if 'SuperRich' in r.get('provider', '')), None)
+    """Admin: Auto-set rate from BOT."""
+    from custom_rate import auto_set_from_bot
     
-    if not superrich or superrich.get('status') not in ['success', 'fallback']:
-        return "❌ 无法获取SuperRich参考汇率"
+    # Find BOT rate from latest rates
+    bot_ref = next((r for r in latest_rates if '泰国央行' in r.get('provider', '')), None)
     
-    # Auto set with no adjustment (you can add margin parameter if needed)
-    result = auto_set_from_superrich(superrich, margin=0.0)
+    if not bot_ref or bot_ref.get('status') not in ['success', 'fallback']:
+        return "❌ 无法获取泰国央行参考汇率"
     
-    return f"✅ 已根据SuperRich自动设置汇率\n\n参考汇率: {superrich['buying_tt']:.4f}\n设置汇率: {result['buying_tt']:.2f}\n\n提示: 汇率已调整为0.05的倍数\n如需微调,使用 '设置汇率 4.55' 命令"
+    # Auto set from BOT
+    result = auto_set_from_bot(bot_ref)
+    
+    if not result:
+        return "❌ 自动设置汇率失败"
+        
+    return f"✅ 已根据泰国央行自动设置汇率\n\n参考汇率: {bot_ref['buying_tt']:.4f}\n设置买入: {result['buying_tt']:.2f}\n设置卖出: {result['selling_tt']:.2f}\n\n提示: 优选买入已按0/5取整，卖出已增加0.20点差"
 
 def handle_help():
     """Display help message."""
@@ -352,7 +363,9 @@ def handle_help():
 • 取消预警 - 关闭提醒
 
 💡 **提示**: 
-当前人民币兑泰铢约在 4.50 左右
+• 优选汇率已按0/5取整 (如 4.50, 4.55)
+• 手动设置汇率将自动设置 +0.20 的卖出价
+• 当前人民币兑泰铢约在 4.50 左右
 """
     return help_text.strip()
 
