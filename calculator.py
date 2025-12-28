@@ -10,7 +10,7 @@ def find_best_rate(rates, rate_type='buying_tt'):
     Returns:
         Dictionary of best rate provider
     """
-    valid_rates = [r for r in rates if r.get('status') in ['success', 'fallback'] and r.get(rate_type)]
+    valid_rates = [r for r in rates if r.get('status') in ['success', 'fallback', 'custom'] and r.get(rate_type)]
     
     if not valid_rates:
         return None
@@ -39,8 +39,9 @@ def format_rate_comparison(rates, highlight_provider='优选汇率'):
         return "❌ 无法获取汇率数据 (Unable to fetch rate data)"
     
     # Sort by buying rate descending
-    valid_rates = [r for r in rates if r.get('status') in ['success', 'fallback']]
-    valid_rates.sort(key=lambda x: x.get('buying_tt', 0), reverse=True)
+    valid_rates = [r for r in rates if r.get('status') in ['success', 'fallback', 'custom']]
+    # Custom rate should always be at the top if it exists
+    valid_rates.sort(key=lambda x: (x.get('status') == 'custom', x.get('buying_tt', 0)), reverse=True)
     
     output = "💱 **CNY → THB 电汇汇率**\n"
     output += "=" * 30 + "\n\n"
@@ -50,14 +51,14 @@ def format_rate_comparison(rates, highlight_provider='优选汇率'):
         buying = rate.get('buying_tt', 0)
         selling = rate.get('selling_tt', 0)
         
-        # Highlight best rate and SuperRich
+        # Highlight custom rate and best market rate
         prefix = ""
-        if idx == 1:
-            prefix = "🏆 "
-        elif highlight_provider in provider:
+        if rate.get('status') == 'custom':
             prefix = "⭐ "
+        elif idx == 1 or (idx == 2 and valid_rates[0].get('status') == 'custom'):
+            prefix = "🏆 "
         
-        status_icon = "✅" if rate['status'] == 'success' else "📊"
+        status_icon = "✅" if rate['status'] in ['success', 'custom'] else "📊"
         
         output += f"{prefix}{status_icon} **{provider}**\n"
         output += f"   买入: {buying:.4f} | 卖出: {selling:.4f}\n\n"
@@ -77,18 +78,18 @@ def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_pro
     Returns:
         Formatted string for LINE message
     """
-    # Filter public display: Focus on BOT reference
-    public_rates = [r for r in rates if r.get('provider') in [
-        '泰国央行参考价'
-    ] and r.get('status') in ['success', 'fallback']]
+    # Filter public display: Focus on reliable references
+    public_sources = ['泰国央行参考价', 'Google财经', '国际中间价']
+    public_rates = [r for r in rates if r.get('provider') in public_sources and r.get('status') in ['success', 'fallback']]
     
     # Add custom rate if provided
+    active_rates = list(public_rates)
     if custom_rate and custom_rate.get('status') == 'custom':
-        public_rates.insert(0, custom_rate)  # Put custom rate first
+        active_rates.insert(0, custom_rate)
     
-    best_deal = find_best_rate(public_rates, 'buying_tt')
+    best_deal = find_best_rate(active_rates, 'buying_tt')
     
-    if not best_deal:
+    if not active_rates:
         return "❌ 当前无法获取有效汇率数据\n(No valid rate data available)"
     
     summary = "💰 **人民币兑换泰铢 CNY → THB**\n"
@@ -97,57 +98,60 @@ def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_pro
     # Show calculation
     summary += f"💵 计算金额: **{amount_cny:,.0f} CNY**\n\n"
     
-    # Best rate
-    best_thb = calculate_exchange(amount_cny, best_deal['buying_tt'])
-    summary += f"🏆 **最佳汇率**: {best_deal['provider']}\n"
-    summary += f"   汇率: {best_deal['buying_tt']:.4f}\n"
-    summary += f"   可得: **{best_thb:,.2f} THB**\n\n"
+    # Preferred rate (Custom) if exists
+    target_rate = custom_rate if custom_rate else best_deal
+    if target_rate:
+        target_thb = calculate_exchange(amount_cny, target_rate['buying_tt'])
+        summary += f"⭐ **{target_rate['provider']}**: {target_rate['buying_tt']:.4f}\n"
+        summary += f"   可得: **{target_thb:,.2f} THB**\n\n"
     
-    # Preferred rate comparison
-    if custom_rate:
-        custom_thb = calculate_exchange(amount_cny, custom_rate['buying_tt'])
-        summary += f"⭐ **{custom_rate['provider']}**: {custom_rate['buying_tt']:.2f}\n"
-        summary += f"   可得: {custom_thb:,.2f} THB\n"
+    # Market Best comparison if different
+    market_best = find_best_rate(public_rates, 'buying_tt')
+    if market_best and market_best != target_rate:
+        market_thb = calculate_exchange(amount_cny, market_best['buying_tt'])
+        summary += f"🏆 **市场最高**: {market_best['provider']}\n"
+        summary += f"   汇率: {market_best['buying_tt']:.4f}\n"
+        summary += f"   可得: {market_thb:,.2f} THB\n"
         
-        if best_deal and best_deal != custom_rate:
-            diff = calculate_exchange(amount_cny, best_deal['buying_tt']) - custom_thb
-            if diff > 0:
-                summary += f"   (比市场最高低 {diff:,.2f} THB)\n"
+        diff = target_thb - market_thb
+        if diff < 0:
+            summary += f"   (差额: {diff:,.2f} THB)\n"
         summary += "\n"
     
     # Rate status indicator
-    if best_deal['buying_tt'] >= 4.55:
+    ref_rate = target_rate['buying_tt']
+    if ref_rate >= 4.55:
         summary += "🟢 **汇率状态**: 高位,适合兑换!\n"
-    elif best_deal['buying_tt'] >= 4.50:
+    elif ref_rate >= 4.45:
         summary += "🟡 **汇率状态**: 正常水平\n"
     else:
         summary += "🔴 **汇率状态**: 偏低,建议等待\n"
     
     summary += "\n" + "=" * 35 + "\n"
-    summary += "💡 输入 '汇率' 查看所有银行对比\n"
-    summary += "💡 输入 '计算 金额' 自定义计算"
+    summary += "💡 输入 '汇率' 查看详细对比\n"
+    summary += "💡 输入 '计算金额' (如: 计算5000)"
     
     return summary
 
 def format_all_rates_table(rates, custom_rate=None):
     """
     Format all rates in a detailed table for LINE display.
-    Only shows Thai banks + custom rate (no SuperRich, BOC, ICBC).
     """
-    # Filter to only approved public rates: Bank of Thailand
-    public_rates = [r for r in rates if r.get('provider') in [
-        '泰国央行参考价'
-    ] and r.get('status') in ['success', 'fallback']]
+    # Filter to only approved public rates
+    public_sources = ['泰国央行参考价', 'Google财经', '国际中间价']
+    public_rates = [r for r in rates if r.get('provider') in public_sources and r.get('status') in ['success', 'fallback']]
     
-    # Add custom rate at the top if provided
+    # Prepare full list for comparison
+    comparison_list = list(public_rates)
     if custom_rate and custom_rate.get('status') == 'custom':
-        public_rates.insert(0, custom_rate)
+        comparison_list.insert(0, custom_rate)
     
-    comparison = format_rate_comparison(public_rates, highlight_provider=custom_rate.get('provider') if custom_rate else '优选汇率')
+    highlight_name = custom_rate.get('provider') if custom_rate else '优选汇率'
+    comparison = format_rate_comparison(comparison_list, highlight_provider=highlight_name)
     
-    best = find_best_rate(public_rates, 'buying_tt')
+    best_market = find_best_rate(public_rates, 'buying_tt')
+    rec_provider = custom_rate.get('provider') if custom_rate else (best_market['provider'] if best_market else "优选汇率")
     
-    rec_provider = custom_rate.get('provider') if custom_rate else (best['provider'] if best else "优选汇率")
     footer = f"\n💡 **建议**: 推荐使用 [**{rec_provider}**] 兑换\n"
     if custom_rate:
         footer += f"当前优选买入价: **{custom_rate['buying_tt']:.2f}**\n\n"
@@ -158,19 +162,3 @@ def format_all_rates_table(rates, custom_rate=None):
     footer += "• 输入 '计算金额' (如: 计算5000) 快速试算"
     
     return comparison + footer
-
-if __name__ == "__main__":
-    # Test data
-    sample_rates = [
-        {'provider': 'SuperRich Thailand', 'buying_tt': 4.52, 'selling_tt': 4.55, 'status': 'success'},
-        {'provider': 'K-Bank (Kasikorn)', 'buying_tt': 4.48, 'selling_tt': 4.58, 'status': 'fallback'},
-        {'provider': 'SCB', 'buying_tt': 4.45, 'selling_tt': 4.60, 'status': 'success'},
-        {'provider': 'Krungsri Bank', 'buying_tt': 4.47, 'selling_tt': 4.59, 'status': 'fallback'},
-        {'provider': 'Bangkok Bank', 'buying_tt': 4.46, 'selling_tt': 4.59, 'status': 'fallback'},
-        {'provider': 'Bank of China (TH)', 'buying_tt': 4.49, 'selling_tt': 4.58, 'status': 'fallback'},
-        {'provider': 'ICBC (Thailand)', 'buying_tt': 4.48, 'selling_tt': 4.57, 'status': 'fallback'}
-    ]
-    
-    print(get_exchange_summary(sample_rates, 5000))
-    print("\n" + "="*50 + "\n")
-    print(format_all_rates_table(sample_rates))
