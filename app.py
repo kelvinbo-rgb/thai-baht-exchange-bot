@@ -416,7 +416,8 @@ def handle_help(is_admin_user=False):
 """
     
     help_text += """
-💡 **提示**: 数据源包含中国银行(泰国)、泰国央行、Google财经等权威机构。
+💡 **温馨提示**
+• 数据源包含中国银行(泰国)、泰国央行、Google财经等权威机构。
 """
     return help_text.strip()
 

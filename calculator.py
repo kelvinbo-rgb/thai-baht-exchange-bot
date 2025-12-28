@@ -120,7 +120,8 @@ def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_pro
     
     summary += "\n" + "=" * 35 + "\n"
     summary += "💡 输入 '汇率' 查看详细对比\n"
-    summary += "💡 输入 '计算金额' (如: 计算5000)"
+    summary += "💡 输入 '计算金额' (如: 计算5000) 试算\n"
+    summary += "💡 输入 '排队' 或 '人工' 获取更多服务"
     
     return summary
 
@@ -143,13 +144,16 @@ def format_all_rates_table(rates, custom_rate=None):
     best_market = find_best_rate(public_rates, 'buying_tt')
     rec_provider = custom_rate.get('provider') if custom_rate else (best_market['provider'] if best_market else "优选汇率")
     
-    footer = f"\n💡 **建议**: 推荐使用 [**{rec_provider}**] 兑换\n"
+    footer = f"\n💡 **建议**\n推荐使用 [**{rec_provider}**] 兑换\n"
     if custom_rate:
         footer += f"当前优选买入价: **{custom_rate['buying_tt']:.2f}**\n\n"
     
-    footer += "📌 提示:\n"
+    footer += "📌 **温馨提示**\n"
     footer += "• 买入 = 我们付给您的价格(越优越好)\n"
     footer += "• 卖出 = 您向我们购买的价格\n"
-    footer += "• 输入 '计算金额' (如: 计算5000) 快速试算"
+    footer += "• 输入 '计算金额' (如: 计算5000) 快速试算\n"
+    footer += "• 输入 '排队' 加入办理队列\n"
+    footer += "• 输入 '位置' 或 '离开' 查看/退出队列\n"
+    footer += "• 输入 '人工' 直接联系管理员咨询"
     
     return comparison + footer
