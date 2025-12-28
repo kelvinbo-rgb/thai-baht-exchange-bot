@@ -26,6 +26,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize LINE Bot API
+import linebot
+logger.info(f"📦 LINE Bot SDK Version: {linebot.__version__}")
+
+if not config.LINE_CHANNEL_SECRET:
+    logger.error("❌ CRTICAL: LINE_CHANNEL_SECRET is missing!")
+else:
+    masked_secret = config.LINE_CHANNEL_SECRET[:5] + "***" + config.LINE_CHANNEL_SECRET[-5:]
+    logger.info(f"🔐 Loaded Secret: {masked_secret} (Length: {len(config.LINE_CHANNEL_SECRET)})")
+
 line_bot_api = LineBotApi(config.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(config.LINE_CHANNEL_SECRET)
 

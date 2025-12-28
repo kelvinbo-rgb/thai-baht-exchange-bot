@@ -5,8 +5,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # LINE Bot credentials (to be set in environment variables)
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', 'YOUR_CHANNEL_ACCESS_TOKEN')
-LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', 'YOUR_CHANNEL_SECRET')
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '').strip()
+LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET', '').strip()
+
+if not LINE_CHANNEL_ACCESS_TOKEN:
+    print("❌ ERROR: LINE_CHANNEL_ACCESS_TOKEN not found in environment settings!")
+    
+if not LINE_CHANNEL_SECRET:
+    print("❌ ERROR: LINE_CHANNEL_SECRET not found in environment settings!")
 
 # Admin user IDs (LINE user IDs)
 # To get your LINE user ID, send a message to the bot and check the logs
