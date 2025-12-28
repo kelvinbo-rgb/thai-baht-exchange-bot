@@ -12,7 +12,7 @@ from calculator import get_exchange_summary, format_all_rates_table
 from database import init_database, save_rate_history, is_admin
 from queue_manager import join_queue, get_queue_status, get_next_customer, mark_completed, get_full_queue, leave_queue
 from alerts import create_alert, cancel_alert, check_alerts_and_notify
-from custom_rate import get_custom_rate, set_custom_rate, auto_set_from_superrich
+from custom_rate import get_custom_rate, set_custom_rate, auto_set_from_bot
 import config
 
 # Initialize Flask app
