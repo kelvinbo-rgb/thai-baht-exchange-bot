@@ -28,7 +28,7 @@ def calculate_exchange(amount_cny, rate):
     """Calculates the amount of THB received."""
     return amount_cny * rate
 
-def format_rate_comparison(rates, highlight_provider='曼谷市场价'):
+def format_rate_comparison(rates, highlight_provider='优选汇率'):
     """
     Formats rates for display with highlighting.
     
@@ -77,9 +77,9 @@ def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_pro
     Returns:
         Formatted string for LINE message
     """
-    # Filter out technical internal rates from public display, but keep 曼谷市场价 and 泰国央行参考价
-    public_rates = [r for r in rates if r.get('provider') not in [
-        '国际中间价', 'Bank of China (TH)', 'ICBC (Thailand)'
+    # Filter public display: Focus on BOT reference
+    public_rates = [r for r in rates if r.get('provider') in [
+        '泰国央行参考价'
     ] and r.get('status') in ['success', 'fallback']]
     
     # Add custom rate if provided
@@ -103,14 +103,16 @@ def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_pro
     summary += f"   汇率: {best_deal['buying_tt']:.4f}\n"
     summary += f"   可得: **{best_thb:,.2f} THB**\n\n"
     
-    # Custom rate comparison if different from best
-    if custom_rate and custom_rate != best_deal:
+    # Preferred rate comparison
+    if custom_rate:
         custom_thb = calculate_exchange(amount_cny, custom_rate['buying_tt'])
-        diff = best_thb - custom_thb
         summary += f"⭐ **{custom_rate['provider']}**: {custom_rate['buying_tt']:.2f}\n"
         summary += f"   可得: {custom_thb:,.2f} THB\n"
-        if diff != 0:
-            summary += f"   差额: {diff:+,.2f} THB\n"
+        
+        if best_deal and best_deal != custom_rate:
+            diff = calculate_exchange(amount_cny, best_deal['buying_tt']) - custom_thb
+            if diff > 0:
+                summary += f"   (比市场最高低 {diff:,.2f} THB)\n"
         summary += "\n"
     
     # Rate status indicator
@@ -132,9 +134,9 @@ def format_all_rates_table(rates, custom_rate=None):
     Format all rates in a detailed table for LINE display.
     Only shows Thai banks + custom rate (no SuperRich, BOC, ICBC).
     """
-    # Filter to only public rates (Thai banks + market refs)
-    public_rates = [r for r in rates if r.get('provider') not in [
-        '国际中间价', 'Bank of China (TH)', 'ICBC (Thailand)'
+    # Filter to only approved public rates: Bank of Thailand
+    public_rates = [r for r in rates if r.get('provider') in [
+        '泰国央行参考价'
     ] and r.get('status') in ['success', 'fallback']]
     
     # Add custom rate at the top if provided
@@ -145,15 +147,15 @@ def format_all_rates_table(rates, custom_rate=None):
     
     best = find_best_rate(public_rates, 'buying_tt')
     
-    if not best:
-        return "❌ 暂无汇率数据"
+    rec_provider = custom_rate.get('provider') if custom_rate else (best['provider'] if best else "优选汇率")
+    footer = f"\n💡 **建议**: 推荐使用 [**{rec_provider}**] 兑换\n"
+    if custom_rate:
+        footer += f"当前优选买入价: **{custom_rate['buying_tt']:.2f}**\n\n"
     
-    footer = f"\n💡 **建议**: 在 {best['provider']} 兑换最划算\n"
-    footer += f"当前最佳买入价: **{best['buying_tt']:.2f}**\n\n"
     footer += "📌 提示:\n"
-    footer += "• 买入= 您卖CNY给我们的价格(重点)\n"
-    footer += "• 卖出 = 您从我们买CNY的价格\n"
-    footer += "• 输入 '计算 金额' 试算兑换结果"
+    footer += "• 买入 = 我们付给您的价格(越优越好)\n"
+    footer += "• 卖出 = 您向我们购买的价格\n"
+    footer += "• 输入 '计算金额' (如: 计算5000) 快速试算"
     
     return comparison + footer
 
