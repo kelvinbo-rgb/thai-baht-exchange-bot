@@ -26,15 +26,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize LINE Bot API
-import linebot
-logger.info(f"📦 LINE Bot SDK Version: {linebot.__version__}")
-
-if not config.LINE_CHANNEL_SECRET:
-    logger.error("❌ CRTICAL: LINE_CHANNEL_SECRET is missing!")
-else:
-    masked_secret = config.LINE_CHANNEL_SECRET[:5] + "***" + config.LINE_CHANNEL_SECRET[-5:]
-    logger.info(f"🔐 Loaded Secret: {masked_secret} (Length: {len(config.LINE_CHANNEL_SECRET)})")
-
 line_bot_api = LineBotApi(config.LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(config.LINE_CHANNEL_SECRET)
 
@@ -97,33 +88,8 @@ def callback():
     
     try:
         handler.handle(body, signature)
-    except InvalidSignatureError as e:
-        import linebot
-        import hmac
-        import hashlib
-        import base64
-        
-        # Calculate signature manually for debugging
-        secret = config.LINE_CHANNEL_SECRET
-        if not secret:
-            calc_sig = "SECRET_MISSING"
-        else:
-            try:
-                hash_val = hmac.new(secret.encode('utf-8'), body.encode('utf-8'), hashlib.sha256).digest()
-                calc_sig = base64.b64encode(hash_val).decode('utf-8')
-            except Exception as calc_err:
-                calc_sig = f"ERROR: {calc_err}"
-
-        masked_secret = secret[:5] + "***" + secret[-5:] if secret else "NONE"
-
-        logger.error("="*60)
-        logger.error("❌ INVALID SIGNATURE ERROR! (DIAGNOSTIC MODE)")
-        logger.error(f"SDK Version: {linebot.__version__}")
-        logger.error(f"Received Sig: {signature}")
-        logger.error(f"Calculated Sig: {calc_sig}")
-        logger.error(f"Loaded Secret: {masked_secret} (Length: {len(secret) if secret else 0})")
-        logger.error(f"Body (first 50): {body[:50]}")
-        logger.error("="*60)
+    except InvalidSignatureError:
+        logger.error("Invalid signature. Please check your LINE_CHANNEL_SECRET.")
         abort(400)
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
