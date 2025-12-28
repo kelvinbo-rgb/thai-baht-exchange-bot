@@ -68,18 +68,9 @@ def format_rate_comparison(rates, highlight_provider='优选汇率'):
 def get_exchange_summary(rates, amount_cny=1000, custom_rate=None, highlight_provider='优选汇率'):
     """
     Generates a comprehensive summary with calculation.
-    
-    Args:
-        rates: List of rate dictionaries
-        amount_cny: Amount in CNY to calculate
-        custom_rate: User's custom rate dictionary
-        highlight_provider: Provider to highlight (defaults to custom rate)
-    
-    Returns:
-        Formatted string for LINE message
     """
     # Filter public display: Focus on reliable references
-    public_sources = ['泰国央行参考价', 'Google财经', '国际中间价']
+    public_sources = ['泰国央行参考价', 'Google财经', '国际中间价', 'Yahoo财经', '中国银行(泰国)']
     public_rates = [r for r in rates if r.get('provider') in public_sources and r.get('status') in ['success', 'fallback']]
     
     # Add custom rate if provided
@@ -138,7 +129,7 @@ def format_all_rates_table(rates, custom_rate=None):
     Format all rates in a detailed table for LINE display.
     """
     # Filter to only approved public rates
-    public_sources = ['泰国央行参考价', 'Google财经', '国际中间价']
+    public_sources = ['泰国央行参考价', 'Google财经', '国际中间价', 'Yahoo财经', '中国银行(泰国)']
     public_rates = [r for r in rates if r.get('provider') in public_sources and r.get('status') in ['success', 'fallback']]
     
     # Prepare full list for comparison
