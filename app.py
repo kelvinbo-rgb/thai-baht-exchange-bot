@@ -12,7 +12,7 @@ from calculator import get_exchange_summary, format_all_rates_table
 from database import init_database, save_rate_history, is_admin
 from queue_manager import join_queue, get_queue_status, get_next_customer, mark_completed, get_full_queue, leave_queue
 from alerts import create_alert, cancel_alert, check_alerts_and_notify
-from custom_rate import get_custom_rate, set_custom_rate, auto_set_from_bot
+from custom_rate import get_custom_rate, set_custom_rate, auto_set_from_ref
 import config
 
 # Initialize Flask app
@@ -171,15 +171,27 @@ def route_command(user_id, user_name, text):
     if text_lower in ['取消预警', 'cancel alert', 'cancel']:
         return handle_cancel_alert(user_id)
     
-    # Admin commands
+    # Human support command
+    if text_lower.startswith(('人工', '客服', '有人吗')):
+        content = text[2:].strip() if text_lower.startswith('人工') else (text[4:].strip() if text_lower.startswith('人工客服') else text)
+        return handle_human_support(user_id, user_name, content)
+    
+    # Admin commands (restricted)
     if is_admin(user_id) or user_id in config.ADMIN_USER_IDS:
+        # Admin Reply: 回复 {user_id} {message}
+        reply_match = re.match(r'回复\s+([a-zA-Z0-9]+)\s+(.+)', text, re.DOTALL)
+        if reply_match:
+            target_id = reply_match.group(1)
+            msg_content = reply_match.group(2)
+            return handle_admin_reply(target_id, msg_content)
+            
         # Set custom rate manually
         set_rate_match = re.match(r'(设置汇率|setrate)\s+(\d+\.?\d*)', text_lower)
         if set_rate_match:
             rate_value = float(set_rate_match.group(2))
             return handle_set_custom_rate(rate_value)
         
-        # Auto set from BOT
+        # Auto set from BOC TH
         if text_lower in ['自动设置', 'auto', 'autoset']:
             return handle_auto_set_rate()
         
@@ -194,7 +206,7 @@ def route_command(user_id, user_name, text):
             return handle_view_queue()
     
     # Help / Default
-    return handle_help()
+    return handle_help(is_admin(user_id) or user_id in config.ADMIN_USER_IDS)
 
 def handle_rate_display():
     """Display all exchange rates."""
@@ -299,6 +311,41 @@ def handle_complete_customer():
     
     return f"✅ 已完成: {customer['user_name']}\n\n输入 '下一个' 处理下一位客户"
 
+def handle_human_support(user_id, user_name, content):
+    """Relay user message to all admins."""
+    if not content:
+        return "请在 '人工' 后面输入您想咨询的内容。例如: 人工 什么时候开门？"
+    
+    admin_msg = f"📩 **收到人工咨询**\n"
+    admin_msg += f"👤 用户: {user_name}\n"
+    admin_msg += f"🆔 ID: `{user_id}`\n"
+    admin_msg += f"💬 内容: {content}\n\n"
+    admin_msg += f"💡 回复指令: 回复 {user_id} [您的内容]"
+    
+    success_count = 0
+    for admin_id in config.ADMIN_USER_IDS:
+        if not admin_id: continue
+        try:
+            line_bot_api.push_message(admin_id, TextSendMessage(text=admin_msg))
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Failed to relay message to admin {admin_id}: {e}")
+            
+    if success_count > 0:
+        return "✅ 消息已发给人工客服，请稍候..."
+    else:
+        return "❌ 抱歉，目前客服不在线。"
+
+def handle_admin_reply(target_id, message):
+    """Admin replying to a user's consultation."""
+    try:
+        reply_text = f"👩‍💻 **客服回复**:\n{message}"
+        line_bot_api.push_message(target_id, TextSendMessage(text=reply_text))
+        return f"✅ 已成功回复给用户: {target_id}"
+    except Exception as e:
+        logger.error(f"Admin reply failed: {e}")
+        return f"❌ 回复失败: {e}"
+
 def handle_view_queue():
     """Admin: View full queue."""
     queue = get_full_queue()
@@ -325,24 +372,22 @@ def handle_set_custom_rate(rate_value):
     return f"✅ 已设置优选汇率\n\n买入价: {result['buying_tt']:.2f}\n卖出价: {result['selling_tt']:.2f}\n\n提示: 汇率已自动调整为0.05的倍数"
 
 def handle_auto_set_rate():
-    """Admin: Auto-set rate from BOT."""
-    from custom_rate import auto_set_from_bot
+    """Admin: Auto-set rate from BOC TH."""
+    # Find BOC TH rate from latest rates
+    boc_ref = next((r for r in latest_rates if '中国银行(泰国)' in r.get('provider', '')), None)
     
-    # Find BOT rate from latest rates
-    bot_ref = next((r for r in latest_rates if '泰国央行' in r.get('provider', '')), None)
+    if not boc_ref or boc_ref.get('status') not in ['success', 'fallback']:
+        return "❌ 无法获取中国银行(泰国)参考汇率"
     
-    if not bot_ref or bot_ref.get('status') not in ['success', 'fallback']:
-        return "❌ 无法获取泰国央行参考汇率"
-    
-    # Auto set from BOT
-    result = auto_set_from_bot(bot_ref)
+    # Auto set from BOC TH
+    result = auto_set_from_ref(boc_ref)
     
     if not result:
         return "❌ 自动设置汇率失败"
         
-    return f"✅ 已根据泰国央行自动设置汇率\n\n参考汇率: {bot_ref['buying_tt']:.4f}\n设置买入: {result['buying_tt']:.2f}\n设置卖出: {result['selling_tt']:.2f}\n\n提示: 优选买入已按0/5取整，卖出已增加0.20点差"
+    return f"✅ 已根据中国银行(泰国)自动设置汇率\n\n中行参考: {boc_ref['buying_tt']:.4f}\n设置买入: {result['buying_tt']:.2f}\n设置卖出: {result['selling_tt']:.2f}\n\n提示: 优选买入已匹配中行并按0/5取整"
 
-def handle_help():
+def handle_help(is_admin_user=False):
     """Display help message."""
     help_text = """
 🤖 **泰铢汇率查询**
@@ -356,12 +401,22 @@ def handle_help():
 • 位置 - 查看排队状态
 • 离开 - 退出队列
 
-🔔 **汇率预警**
-• 预警 [汇率] - 设置提醒 (如: 预警 4.55)
-• 取消预警 - 关闭提醒
-
-💡 **提示**: 
-• 数据源: 泰国央行、Google财经、Yahoo财经、中行(泰国)等
+🔔 **客服功能**
+• 人工 [内容] - 直接与管理员对话咨询
+"""
+    if is_admin_user:
+        help_text += """
+🛠️ **管理员功能**
+• 自动设置 - 根据中行价格自动同步优选价
+• 设置汇率 [数值] - 手动设置优选价格
+• 队列 - 查看当前所有人排队名单
+• 下一个 - 呼叫并通知下一位客户
+• 完成 - 标记当前客户服务结束
+• 回复 [ID] [内容] - 回复咨询的用户
+"""
+    
+    help_text += """
+💡 **提示**: 数据源包含中国银行(泰国)、泰国央行、Google财经等权威机构。
 """
     return help_text.strip()
 

@@ -68,16 +68,16 @@ def get_custom_rate():
         logging.error(f"Failed to load custom rate: {e}")
         return None
 
-def auto_set_from_bot(bot_rate, provider_name="优选汇率"):
+def auto_set_from_ref(ref_rate_dict, provider_name="优选汇率"):
     """
-    Automatically set custom rate based on Bank of Thailand (BOT) rate.
-    Logic: BOT rate rounded to 0/5. Sell = Buy + 0.20.
+    Automatically set custom rate based on a reference rate dictionary.
+    Logic: Reference buying rate rounded to 0/5. Sell = Buy + 0.20.
     """
-    if bot_rate.get('status') not in ['success', 'fallback']:
-        logging.error("Invalid BOT rate provided")
+    if ref_rate_dict.get('status') not in ['success', 'fallback']:
+        logging.error("Invalid reference rate provided")
         return None
     
-    base_rate = bot_rate.get('buying_tt', 0.0)
+    base_rate = ref_rate_dict.get('buying_tt', 0.0)
     if base_rate == 0.0:
         return None
         
